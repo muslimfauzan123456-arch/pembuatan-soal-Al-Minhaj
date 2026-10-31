@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pembuat Soal AI</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:system-ui,Arial,sans-serif;background:#f3f5f7;margin:0;color:#222}
+  .wrap{max-width:900px;margin:0 auto;padding:16px}
+  h1{font-size:22px;margin:8px 0 16px}
+  h2{font-size:16px;margin:0 0 10px;color:#0b6b4f}
+  h3{margin:20px 0 8px;color:#0b6b4f}
+  .card{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px #0001}
+  label{display:block;font-size:13px;margin:8px 0 3px;color:#555}
+  input[type=text],input[type=password],input[type=number],select,textarea{width:100%;padding:8px;border:1px solid #ccd;border-radius:6px;font:inherit}
+  textarea{resize:vertical}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .grid3{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  @media(max-width:600px){.grid,.grid3{grid-template-columns:1fr}}
+  button{background:#0b6b4f;color:#fff;border:0;padding:10px 16px;border-radius:8px;font:inherit;cursor:pointer}
+  button:disabled{opacity:.5;cursor:wait}
+  button.kecil{padding:4px 10px;font-size:12px}
+  button.merah{background:#c0392b}
+  button.abu{background:#667}
+  #status{margin-top:10px;font-size:14px}
+  #status.err{color:#c0392b}
+  .kartu{border:1px solid #dde;border-radius:8px;padding:10px;margin-bottom:10px;background:#fff}
+  .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .opsi{display:flex;gap:6px;align-items:center;margin-top:5px}
+  .opsi input[type=text]{flex:1}
+  #aksi{display:none;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
+  #logoPrev{max-height:60px;margin-top:6px;display:none}
+  small{color:#777}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📝 Pembuat Soal AI (Gemini)</h1>
+
+  <div class="card">
+    <h2>1. Pengaturan Gemini</h2>
+    <div class="grid">
+      <div><label>API Key</label><input type="password" id="apiKey" placeholder="AIza..."></div>
+      <div><label>Model</label><input type="text" id="model" value="gemini-3.8-flash"></div>
+    </div>
+    <small>Kunci disimpan hanya di browser komputer ini. Jangan bagikan file ini setelah kunci terisi.</small>
+  </div>
+
+  <div class="card">
+    <h2>2. Kop & Identitas Ujian</h2>
+    <label>Nama Lembaga</label><input type="text" id="lembaga" placeholder="Nama pondok / sekolah">
+    <label>Alamat</label><input type="text" id="alamat" placeholder="Alamat lengkap">
+    <label>Logo (PNG/JPG)</label><input type="file" id="logo" accept="image/png,image/jpeg"><img id="logoPrev">
+    <label>Judul Dokumen</label><input type="text" id="judul" value="SOAL UJIAN">
+    <div class="grid">
+      <div><label>Mata Pelajaran</label><input type="text" id="mapel"></div>
+      <div><label>Kelas</label><input type="text" id="kelas"></div>
+      <div><label>Hari / Tanggal</label><input type="text" id="hari"></div>
+      <div><label>Waktu</label><input type="text" id="waktu" placeholder="mis. 60 menit"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>3. Materi</h2>
+    <label>Unggah file materi (PDF, DOCX, TXT, atau gambar) — boleh lebih dari satu</label>
+    <input type="file" id="materiFile" multiple accept=".pdf,.docx,.txt,.md,image/*">
+    <label>Atau tempel teks materi</label>
+    <textarea id="materiTeks" rows="5"></textarea>
+  </div>
+
+  <div class="card">
+    <h2>4. Jenis & Jumlah Soal</h2>
+    <div class="grid3">
+      <div><label>Pilihan Ganda</label><input type="number" id="nPG" value="10" min="0" max="50"></div>
+      <div><label>Benar/Salah</label><input type="number" id="nBS" value="5" min="0" max="50"></div>
+      <div><label>Essai</label><input type="number" id="nEssai" value="3" min="0" max="30"></div>
+      <div><label>Opsi per PG</label><select id="opsi"><option>4</option><option>5</option></select></div>
+    </div>
+    <div class="grid">
+      <div><label>Bahasa soal</label>
+        <select id="bahasa"><option value="id">Indonesia</option><option value="ar">Arab</option><option value="en">Inggris</option></select></div>
+      <div><label>Tingkat kesulitan</label>
+        <select id="level"><option>campuran (mudah, sedang, sulit)</option><option>mudah</option><option>sedang</option><option>sulit</option></select></div>
+    </div>
+    <div style="margin-top:12px"><button id="btnGen">✨ Buat Soal</button></div>
+    <div id="status"></div>
+  </div>
+
+  <div id="aksi">
+    <button id="btnUnduh">⬇️ Unduh Word (.docx)</button>
+    <label style="margin:0;display:flex;gap:6px;align-items:center"><input type="checkbox" id="kunciChk" checked> Sertakan kunci jawaban (halaman terpisah)</label>
+  </div>
+  <div id="hasil"></div>
+</div>
+
+<script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
+<script src="https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const H = 'ABCDEFGH';
+let logoData = null;
+let soal = {pg:[], bs:[], essai:[]};
+
+/* simpan isian di browser */
+['apiKey','model','judul','lembaga','alamat','mapel','kelas','hari','waktu'].forEach(id=>{
+  const el=$(id), v=localStorage.getItem('ps_'+id);
+  if(v!==null) el.value=v;
+  el.addEventListener('input',()=>localStorage.setItem('ps_'+id, el.value));
+});
+
+/* logo */
+$('logo').addEventListener('change', async e=>{
+  const f=e.target.files[0];
+  if(!f){logoData=null;$('logoPrev').style.display='none';return;}
+  const buf=await f.arrayBuffer();
+  const url=URL.createObjectURL(f);
+  const img=new Image();
+  img.onload=()=>{
+    const h=70, w=Math.round(img.naturalWidth/img.naturalHeight*h);
+    logoData={bytes:new Uint8Array(buf), w, h, type:f.type.includes('png')?'png':'jpg'};
+    $('logoPrev').src=url; $('logoPrev').style.display='block';
+  };
+  img.src=url;
+});
+
+function setStatus(t,err){const s=$('status'); s.textContent=t; s.className=err?'err':'';}
+function toBase64(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});}
+
+async function bacaMateri(){
+  const parts=[]; let teks=$('materiTeks').value.trim(); let total=0;
+  for(const f of [...$('materiFile').files]){
+    total+=f.size; const nm=f.name.toLowerCase();
+    if(nm.endsWith('.docx')){
+      const r=await mammoth.extractRawText({arrayBuffer:await f.arrayBuffer()});
+      teks+='\n\n'+r.value;
+    } else if(nm.endsWith('.txt')||nm.endsWith('.md')){
+      teks+='\n\n'+await f.text();
+    } else if(f.type==='application/pdf'||f.type.startsWith('image/')){
+      parts.push({inlineData:{mimeType:f.type,data:await toBase64(f)}});
+    } else throw new Error('Format tidak didukung: '+f.name+' (gunakan PDF, DOCX, TXT, atau gambar).');
+  }
+  if(total>18*1024*1024) throw new Error('Total file terlalu besar (maks sekitar 18 MB).');
+  if(!teks&&!parts.length) throw new Error('Isi materi dulu: unggah file atau tempel teks.');
+  return {teks,parts};
+}
+
+function buatPrompt(teks,n){
+  const bhs={id:'Bahasa Indonesia',ar:'Bahasa Arab fusha (berharakat bila diperlukan)',en:'Bahasa Inggris'}[$('bahasa').value];
+  return `Kamu adalah guru berpengalaman yang menyusun soal ujian.
+Buat soal HANYA berdasarkan materi yang diberikan (file terlampir dan/atau teks di bawah). Jangan menambah fakta di luar materi.
+Bahasa soal: ${bhs}.
+Tingkat kesulitan: ${$('level').value}.
+Jumlah soal:
+- Pilihan ganda: ${n.pg} soal, masing-masing ${n.opsi} opsi, satu jawaban benar, pengecoh masuk akal, posisi jawaban benar diacak.
+- Benar/Salah: ${n.bs} pernyataan (campuran benar dan salah secara seimbang).
+- Essai: ${n.essai} soal, sertakan kunci jawaban singkat.
+Balas HANYA dengan JSON valid berbentuk persis:
+{"pg":[{"q":"...","options":["...","..."],"answer":0}],"bs":[{"q":"...","answer":true}],"essai":[{"q":"...","key":"..."}]}
+"answer" pada pg adalah indeks opsi yang benar (mulai dari 0). Jangan menulis huruf A/B/C di dalam teks opsi.
+${teks?'\nMATERI TEKS:\n'+teks:''}`;
+}
+
+$('btnGen').addEventListener('click', async ()=>{
+  const key=$('apiKey').value.trim();
+  if(!key) return alert('Isi API key dulu.');
+  $('btnGen').disabled=true;
+  try{
+    setStatus('Membaca materi...');
+    const {teks,parts}=await bacaMateri();
+    const n={pg:+$('nPG').value||0,bs:+$('nBS').value||0,essai:+$('nEssai').value||0,opsi:+$('opsi').value};
+    if(n.pg+n.bs+n.essai===0) throw new Error('Jumlah soal masih 0.');
+    setStatus('Menghubungi Gemini, mohon tunggu (bisa 10–60 detik)...');
+    const model=$('model').value.trim()||'gemini-3.8-flash';
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-goog-api-key':key},
+      body:JSON.stringify({
+        contents:[{role:'user',parts:[{text:buatPrompt(teks,n)},...parts]}],
+        generationConfig:{responseMimeType:'application/json',temperature:0.7}
+      })
+    });
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.error?.message||('Error '+res.status));
+    const out=(data.candidates?.[0]?.content?.parts||[]).filter(p=>p.text&&!p.thought).map(p=>p.text).join('');
+    if(!out) throw new Error('Respons kosong: '+(data.promptFeedback?.blockReason||data.candidates?.[0]?.finishReason||'tidak diketahui'));
+    const j=JSON.parse(out.replace(/^```(?:json)?|```$/g,'').trim());
+    soal.pg=(j.pg||[]).map(s=>({
+      q:s.q, options:s.options||[],
+      answer: typeof s.answer==='number' ? s.answer : Math.max(0,H.indexOf(String(s.answer).trim().toUpperCase()[0]))
+    }));
+    soal.bs=(j.bs||[]).map(s=>({q:s.q, answer: s.answer===true||/^(true|benar|b)$/i.test(String(s.answer))}));
+    soal.essai=(j.essai||[]).map(s=>({q:s.q,key:s.key||''}));
+    render();
+    setStatus('Selesai. Periksa dan edit soal di bawah, lalu klik Unduh Word.');
+  }catch(e){
+    setStatus('Gagal: '+e.message,true);
+  }
+  $('btnGen').disabled=false;
+});
+
+/* tampilan edit */
+function ta(val,cb,rows=2){
+  const t=document.createElement('textarea'); t.value=val||''; t.rows=rows; t.dir='auto';
+  t.addEventListener('input',()=>cb(t.value)); return t;
+}
+function render(){
+  const box=$('hasil'); box.innerHTML='';
+  $('aksi').style.display=(soal.pg.length+soal.bs.length+soal.essai.length)?'flex':'none';
+  const judul=t=>{const h=document.createElement('h3');h.textContent=t;box.appendChild(h);};
+  const kartu=(arr,i,kids)=>{
+    const d=document.createElement('div'); d.className='kartu';
+    const top=document.createElement('div'); top.className='top'; top.innerHTML=`<b>No. ${i+1}</b>`;
+    const del=document.createElement('button'); del.textContent='Hapus'; del.className='kecil merah';
+    del.onclick=()=>{arr.splice(i,1);render();};
+    top.appendChild(del); d.appendChild(top); kids.forEach(c=>d.appendChild(c)); box.appendChild(d);
+  };
+  if(soal.pg.length){
+    judul('Pilihan Ganda (pilih bulatan = jawaban benar)');
+    soal.pg.forEach((s,i)=>{
+      const kids=[ta(s.q,v=>s.q=v)];
+      s.options.forEach((o,k)=>{
+        const row=document.createElement('div'); row.className='opsi';
+        const r=document.createElement('input'); r.type='radio'; r.name='pg'+i; r.checked=(s.answer===k); r.onchange=()=>s.answer=k;
+        const l=document.createElement('span'); l.textContent=H[k]+'.';
+        const t=document.createElement('input'); t.type='text'; t.value=o; t.dir='auto'; t.oninput=()=>s.options[k]=t.value;
+        row.append(r,l,t); kids.push(row);
+      });
+      kartu(soal.pg,i,kids);
+    });
+  }
+  if(soal.bs.length){
+    judul('Benar / Salah');
+    soal.bs.forEach((s,i)=>{
+      const sel=document.createElement('select');
+      sel.innerHTML='<option value="1">Benar</option><option value="0">Salah</option>';
+      sel.value=s.answer?'1':'0'; sel.onchange=()=>s.answer=sel.value==='1';
+      sel.style.marginTop='6px';
+      kartu(soal.bs,i,[ta(s.q,v=>s.q=v),sel]);
+    });
+  }
+  if(soal.essai.length){
+    judul('Essai');
+    soal.essai.forEach((s,i)=>{
+      const lb=document.createElement('label'); lb.textContent='Kunci jawaban';
+      kartu(soal.essai,i,[ta(s.q,v=>s.q=v),lb,ta(s.key,v=>s.key=v)]);
+    });
+  }
+}
+
+/* unduh Word: A4, margin narrow (1,27 cm), portrait */
+const LBL={
+  id:{pg:'PILIHAN GANDA',pgP:'Pilihlah satu jawaban yang paling benar!',bs:'BENAR / SALAH',bsP:'Tulis B jika pernyataan benar dan S jika salah!',es:'ESSAI',esP:'Jawablah pertanyaan berikut dengan singkat dan jelas!',mapel:'Mata Pelajaran',kelas:'Kelas',hari:'Hari/Tanggal',waktu:'Waktu',nama:'Nama',nomor:'No. Absen',kunci:'KUNCI JAWABAN',B:'B',S:'S',L:['A','B','C']},
+  ar:{pg:'الاختيار من متعدد',pgP:'اختر الإجابة الصحيحة!',bs:'صح أو خطأ',bsP:'اكتب (ص) إذا كانت العبارة صحيحة و(خ) إذا كانت خاطئة!',es:'أسئلة مقالية',esP:'أجب عن الأسئلة التالية بإيجاز!',mapel:'المادة',kelas:'الصف',hari:'اليوم/التاريخ',waktu:'الزمن',nama:'الاسم',nomor:'رقم الحضور',kunci:'مفتاح الإجابة',B:'ص',S:'خ',L:['أ','ب','ج']},
+  en:{pg:'MULTIPLE CHOICE',pgP:'Choose the best answer!',bs:'TRUE / FALSE',bsP:'Write T if the statement is true and F if it is false!',es:'ESSAY',esP:'Answer the following questions briefly!',mapel:'Subject',kelas:'Class',hari:'Day/Date',waktu:'Time',nama:'Name',nomor:'No.',kunci:'ANSWER KEY',B:'T',S:'F',L:['A','B','C']}
+};
+
+$('btnUnduh').addEventListener('click', async ()=>{
+  const D=docx, bhs=$('bahasa').value, ar=bhs==='ar', T=LBL[bhs];
+  const FONT=ar?'Traditional Arabic':'Times New Roman', SZ=ar?28:22;
+  const run=(t,o={})=>new D.TextRun({text:t,font:FONT,size:SZ,rightToLeft:ar,...o});
+  const para=(ch,o={})=>new D.Paragraph({children:ch,bidirectional:ar,spacing:{after:60},...o});
+  const tab=pos=>({tabStops:[{type:D.TabStopType.LEFT,position:pos}]});
+  const NB={style:D.BorderStyle.NONE,size:0,color:'FFFFFF'};
+  const noB={top:NB,bottom:NB,left:NB,right:NB};
+  const W=10466;
+  const kids=[];
+
+  /* kop */
+  const lembaga=$('lembaga').value.trim(), alamat=$('alamat').value.trim();
+  if(lembaga||alamat||logoData){
+    const cells=[];
+    if(logoData) cells.push(new D.TableCell({width:{size:1500,type:D.WidthType.DXA},borders:noB,verticalAlign:D.VerticalAlign.CENTER,
+      children:[new D.Paragraph({children:[new D.ImageRun({data:logoData.bytes,type:logoData.type,transformation:{width:logoData.w,height:logoData.h}})]})]}));
+    cells.push(new D.TableCell({width:{size:logoData?W-1500:W,type:D.WidthType.DXA},borders:noB,verticalAlign:D.VerticalAlign.CENTER,
+      children:[
+        new D.Paragraph({alignment:D.AlignmentType.CENTER,children:[new D.TextRun({text:lembaga.toUpperCase(),bold:true,size:30,font:FONT})]}),
+        new D.Paragraph({alignment:D.AlignmentType.CENTER,children:[new D.TextRun({text:alamat,size:20,font:FONT})]})
+      ]}));
+    kids.push(new D.Table({width:{size:W,type:D.WidthType.DXA},columnWidths:logoData?[1500,W-1500]:[W],
+      borders:{...noB,insideHorizontal:NB,insideVertical:NB},rows:[new D.TableRow({children:cells})]}));
+    kids.push(new D.Paragraph({border:{bottom:{style:D.BorderStyle.SINGLE,size:18,color:'000000',space:1}},spacing:{after:120},children:[]}));
+  }
+
+  /* judul & identitas */
+  kids.push(new D.Paragraph({alignment:D.AlignmentType.CENTER,spacing:{after:120},
+    children:[new D.TextRun({text:$('judul').value||'',bold:true,size:26,font:FONT})]}));
+  const cell=t=>new D.TableCell({width:{size:W/2,type:D.WidthType.DXA},borders:noB,children:[para([run(t)])]});
+  kids.push(new D.Table({width:{size:W,type:D.WidthType.DXA},columnWidths:[W/2,W/2],borders:{...noB,insideHorizontal:NB,insideVertical:NB},
+    rows:[
+      new D.TableRow({children:[cell(`${T.mapel} : ${$('mapel').value}`),cell(`${T.hari} : ${$('hari').value}`)]}),
+      new D.TableRow({children:[cell(`${T.kelas} : ${$('kelas').value}`),cell(`${T.waktu} : ${$('waktu').value}`)]}),
+      new D.TableRow({children:[cell(`${T.nama} : ..............................`),cell(`${T.nomor} : ..........`)]})
+    ]}));
+  kids.push(new D.Paragraph({border:{bottom:{style:D.BorderStyle.SINGLE,size:6,color:'000000',space:1}},spacing:{after:120},children:[]}));
+
+  /* soal */
+  let sec=0;
+  const head=(t,p)=>{
+    kids.push(para([run(`${T.L[sec++]}. ${t}`,{bold:true})],{spacing:{before:120,after:20}}));
+    kids.push(para([run(p,{italics:true})],{spacing:{after:80}}));
+  };
+  if(soal.pg.length){
+    head(T.pg,T.pgP);
+    soal.pg.forEach((s,i)=>{
+      kids.push(para([run(`${i+1}.\t${s.q}`)],{indent:{left:425,hanging:425},...tab(425),spacing:{before:40,after:20}}));
+      s.options.forEach((o,k)=>kids.push(para([run(`${H[k]}.\t${o}`)],{indent:{left:850,hanging:425},...tab(850),spacing:{after:10}})));
+    });
+  }
+  if(soal.bs.length){
+    head(T.bs,T.bsP);
+    soal.bs.forEach((s,i)=>kids.push(para([run(`${i+1}.\t(      )  ${s.q}`)],{indent:{left:425,hanging:425},...tab(425)})));
+  }
+  if(soal.essai.length){
+    head(T.es,T.esP);
+    soal.essai.forEach((s,i)=>kids.push(para([run(`${i+1}.\t${s.q}`)],{indent:{left:425,hanging:425},...tab(425),spacing:{after:360}})));
+  }
+
+  /* kunci */
+  if($('kunciChk').checked){
+    kids.push(new D.Paragraph({pageBreakBefore:true,alignment:D.AlignmentType.CENTER,spacing:{after:120},
+      children:[new D.TextRun({text:T.kunci,bold:true,size:26,font:FONT})]}));
+    if(soal.pg.length){
+      kids.push(para([run(`${T.pg}`,{bold:true})]));
+      kids.push(para([run(soal.pg.map((s,i)=>`${i+1}. ${H[s.answer]||'?'}`).join('     '))]));
+    }
+    if(soal.bs.length){
+      kids.push(para([run(`${T.bs}`,{bold:true})],{spacing:{before:120,after:60}}));
+      kids.push(para([run(soal.bs.map((s,i)=>`${i+1}. ${s.answer?T.B:T.S}`).join('     '))]));
+    }
+    if(soal.essai.length){
+      kids.push(para([run(`${T.es}`,{bold:true})],{spacing:{before:120,after:60}}));
+      soal.essai.forEach((s,i)=>kids.push(para([run(`${i+1}.\t${s.key}`)],{indent:{left:425,hanging:425},...tab(425)})));
+    }
+  }
+
+  const doc=new D.Document({
+    styles:{default:{document:{run:{font:FONT,size:SZ}}}},
+    sections:[{
+      properties:{page:{
+        size:{width:11906,height:16838,orientation:D.PageOrientation.PORTRAIT},
+        margin:{top:720,bottom:720,left:720,right:720,header:360,footer:360}
+      }},
+      children:kids
+    }]
+  });
+  const blob=await D.Packer.toBlob(doc);
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='Soal_'+(($('mapel').value||'Ujian').replace(/[^\w\u0600-\u06FF -]/g,'').trim()||'Ujian')+'.docx';
+  a.click();
+});
+</script>
+</body>
+</html>
